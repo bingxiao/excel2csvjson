@@ -31,11 +31,11 @@ pub struct Cli {
     )]
     pub json: bool,
     #[structopt(
-        long = "force",
+        long = "first",
         short = "f",
-        help = "force processing the first one for multiple sheets if without sheet"
+        help = "process the 1st if multiple sheets were found. Or use '--sheet' to clarify"
     )]
-    pub force: bool,
+    pub first: bool,
     #[structopt(flatten)]
     pub verbose: clap_verbosity_flag::Verbosity,
     #[structopt(flatten)]
@@ -53,18 +53,23 @@ fn main() -> Result<(), Box<Error>> {
     let mut xl = open_workbook_auto(&path).unwrap();
 
     let sheets = xl.sheet_names().to_owned();
-    if sheets.len() != 1 {
-        if args.force {
-            eprintln!(
-                "The file has {} sheets but we choose the FIRST one only: {}",
-                sheets.len(),
-                &sheets[0],
-            );
-        } else {
-            panic!("Which sheet to convert? Candidates are: {:?}", sheets);
+    let sheet = match &args.sheet {
+        Some(sheet) => sheet,
+        None => {
+            if sheets.len() > 1 {
+                if args.first {
+                    eprintln!(
+                        "The file has {} sheets but we choose the FIRST one only: {}",
+                        sheets.len(),
+                        &sheets[0],
+                    );
+                } else {
+                    panic!("Which sheet to convert? Candidates are: {:?}", sheets);
+                }
+            }
+            &sheets[0]
         }
     };
-    let sheet = &args.sheet.unwrap_or(sheets[0].clone());
 
     let range = xl.worksheet_range(&sheet).unwrap().unwrap();
     {
@@ -81,19 +86,25 @@ fn main() -> Result<(), Box<Error>> {
                     DataType::Bool(ref b) => format!("{}", b),
                 })
                 .collect::<Vec<String>>();
-            wtr.write_record(&row).unwrap();
+            wtr.write_record(&row)?;
             // println!("{:?}", row);
         }
     };
     dest.seek(SeekFrom::Start(0))?;
 
     if args.json {
+        type Row = Map<String, Value>;
         let buff = BufReader::new(dest);
         let mut rdr = csv::Reader::from_reader(buff);
-        for result in rdr.deserialize() {
-            let record: Map<String, Value> = result?;
-            println!("{}", serde_json::to_string_pretty(&record)?);
-        }
+        let array: Vec<Row> = rdr
+            .deserialize()
+            .into_iter()
+            .map(|result| {
+                let record: Row = result.unwrap();
+                record
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&array)?);
     } else {
         let s = String::from_utf8(dest.into_inner())?;
         println!("{}", s);
