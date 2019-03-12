@@ -1,0 +1,14 @@
+[package]
+authors = ["bingxiao"]
+edition = "2018"
+name = "excel2csvjson"
+version = "0.1.1"
+
+[dependencies]
+calamine = "0.15.3"
+clap-log-flag = "0.2.1"
+clap-verbosity-flag = "0.2.0"
+csv = "1.0.5"
+quicli = "0.4.0"
+serde_json = { version = "*", features = [ "preserve_order"] }
+structopt = "0.2.15"
